@@ -1327,6 +1327,8 @@ process.stdin.on("end", () => {
 
   it("[P2] preserves stable linux AppImage smoke reports for release publication", async () => {
     const workflow = await readFile(releaseStableWorkflowPath, "utf8");
+    const linuxJob = sectionBetween(workflow, "  build_linux:", "  publish_docker_image:");
+    const publishJob = sectionBetween(workflow, "  publish:", "  cleanup_partial_release_assets:");
     const linuxBuildStep = workflow.match(
       /- name: Build release linux artifacts\r?\n(?:.+\r?\n)+?(?=\r?\n      - name: Smoke release linux AppImage runtime)/m,
     );
@@ -1340,6 +1342,12 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("Upload linux e2e spec report");
     expect(workflow).toContain("open-design-release-linux-e2e-report");
     expect(workflow).toContain("Download linux e2e spec report");
+    expect(linuxJob).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");
+    expect(linuxJob).not.toContain("ENABLE_STABLE_LINUX");
+    expect(publishJob).toContain("needs.build_linux.result == 'success'");
+    expect(publishJob).not.toContain("needs.build_linux.result == 'skipped'");
+    expect(publishJob.match(/ENABLE_LINUX_X64: "true"/g)).toHaveLength(2);
+    expect(publishJob).not.toContain("ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}");
     expectReleaseLinuxBuildPreservesEvidence(workflow, "Build release linux artifacts");
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke release linux AppImage runtime");
   });
@@ -1826,6 +1834,8 @@ process.stdin.on("end", () => {
         const notes = await readFile(outputs.notes_file ?? "", "utf8");
         expect(notes).toContain(`R2 metadata: ${origin.replace(/\/+$/, "")}/stable/latest/metadata.json`);
         expect(notes).toContain(`E2E report: ${origin.replace(/\/+$/, "")}/stable/versions/0.13.0/report.zip`);
+        expect(notes).toContain("Linux x64 AppImage");
+        expect(notes).not.toContain("remains optional");
       } finally {
         await rm(runnerTemp, { force: true, recursive: true });
       }

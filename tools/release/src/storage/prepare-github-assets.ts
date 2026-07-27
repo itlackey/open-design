@@ -1,4 +1,5 @@
-import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, createReadStream, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { optional, required, writeJson } from "./common.ts";
 import { releaseChannelDescriptor } from "@open-design/release";
@@ -9,8 +10,6 @@ const sourceDir = required("RELEASE_GITHUB_ASSETS_SOURCE_DIR");
 const outputDir = required("RELEASE_GITHUB_ASSETS_DIR");
 const outputsPath = optional("RELEASE_OUTPUTS_PATH", join(dirname(outputDir), "github-assets-outputs.json"));
 const summaryPath = optional("RELEASE_SUMMARY_PATH", join(dirname(outputDir), "github-assets-summary.md"));
-const enableLinux = optional("ENABLE_LINUX_X64") === "true";
-
 if (releaseChannel !== "stable") {
   throw new Error(`prepare-github-assets only supports stable releases; got ${releaseChannel}`);
 }
@@ -45,22 +44,36 @@ function findRequiredAsset(files: string[], name: string): string {
   return matches[0] ?? "";
 }
 
-const allowedNames = [
+const assetNames = [
   `open-design-${releaseVersion}-mac-arm64.dmg`,
-  `open-design-${releaseVersion}-mac-arm64.dmg.sha256`,
   `open-design-${releaseVersion}-mac-x64.dmg`,
-  `open-design-${releaseVersion}-mac-x64.dmg.sha256`,
   `open-design-${releaseVersion}-win-x64-setup.exe`,
-  `open-design-${releaseVersion}-win-x64-setup.exe.sha256`,
-  ...(enableLinux
-    ? [
-        `open-design-${releaseVersion}-linux-x64.AppImage`,
-        `open-design-${releaseVersion}-linux-x64.AppImage.sha256`,
-      ]
-    : []),
+  `open-design-${releaseVersion}-linux-x64.AppImage`,
 ];
+const allowedNames = assetNames.flatMap((name) => [name, `${name}.sha256`]);
+
+async function sha256(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function verifyChecksum(files: string[], name: string): Promise<void> {
+  const asset = findRequiredAsset(files, name);
+  const sidecarName = `${name}.sha256`;
+  const sidecar = findRequiredAsset(files, sidecarName);
+  const expected = readFileSync(sidecar, "utf8").trim().split(/\s+/, 1)[0] ?? "";
+  if (!/^[a-f0-9]{64}$/i.test(expected)) {
+    throw new Error(`invalid GitHub release asset checksum: ${sidecarName}`);
+  }
+  const actual = await sha256(asset);
+  if (actual !== expected.toLowerCase()) {
+    throw new Error(`GitHub release asset checksum mismatch: ${name}`);
+  }
+}
 
 const sourceFiles = listFiles(sourceDir);
+for (const name of assetNames) await verifyChecksum(sourceFiles, name);
 rmSync(outputDir, { force: true, recursive: true });
 mkdirSync(outputDir, { recursive: true });
 
