@@ -6,9 +6,10 @@ Future automated stable releases must build, smoke, and publish a Linux x64
 AppImage and its SHA-256 sidecar. If the Linux lane fails or either file is
 missing, `release-stable` must not publish the GitHub Release.
 
-This investigation was completed on Ubuntu 26.04 x86_64 against upstream
-`main` commit `340cbb9b94a2bc972c0bc3f74efa2c326c820764` on 2026-07-27. It fixes
-four independent failures:
+This investigation was completed on Ubuntu 26.04 x86_64 against final upstream
+`main` commit `fac10139c0138a5700c128079e23c3e7a622516c` on 2026-07-27. Its final
+upstream update changed only CI scope policy, not AppImage or release files. The
+branch fixes four independent failures:
 
 | Failure | Root cause | Fix |
 | --- | --- | --- |
