@@ -832,10 +832,12 @@ describe("createLinuxDesktopLaunchEnv", () => {
     const env = createLinuxDesktopLaunchEnv(config, stamp, {
       ELECTRON_RUN_AS_NODE: "1",
       KEEP_ME: "yes",
+      OD_PACKAGED_NAMESPACE_BASE_ROOT: "/wrong-root",
     });
 
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.KEEP_ME).toBe("yes");
+    expect(env.OD_PACKAGED_NAMESPACE_BASE_ROOT).toBe(config.roots.runtime.namespaceBaseRoot);
     expect(env.OD_SIDECAR_BASE).toBe(resolve(config.roots.runtime.namespaceRoot, "runtime"));
   });
 });

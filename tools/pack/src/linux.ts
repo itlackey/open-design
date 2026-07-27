@@ -38,6 +38,7 @@ const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
@@ -1085,7 +1086,11 @@ export function createLinuxDesktopLaunchEnv(
   const env = createSidecarLaunchEnv({
     base: join(config.roots.runtime.namespaceRoot, "runtime"),
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    extraEnv: { ...baseEnv, [DESKTOP_LOG_ECHO_ENV]: "0" },
+    extraEnv: {
+      ...baseEnv,
+      [DESKTOP_LOG_ECHO_ENV]: "0",
+      [PACKAGED_NAMESPACE_BASE_ROOT_ENV]: config.roots.runtime.namespaceBaseRoot,
+    },
     stamp,
   });
   delete env.ELECTRON_RUN_AS_NODE;
