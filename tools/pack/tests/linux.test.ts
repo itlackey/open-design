@@ -37,7 +37,6 @@ import {
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
-  resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
@@ -140,6 +139,7 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("ELECTRON_CACHE=/home/builder/.cache/electron");
     expect(args).toContain("ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder");
     expect(args).toContain("npm_execpath=/tmp/pnpm");
+    expect(args).not.toContain("OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm");
   });
 
   it("passes the telemetry relay URL into containerized builds when configured", () => {
@@ -318,12 +318,6 @@ describe("buildDockerArgs", () => {
     );
     const last = args[args.length - 1];
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
-  });
-
-  it("uses managed npm for production dependencies and standalone pnpm for workspace commands", () => {
-    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-    expect(args).toContain("npm_execpath=/tmp/pnpm");
-    expect(args).not.toContain("OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm");
   });
 });
 
@@ -614,49 +608,6 @@ describe("stopPackedLinuxApp", () => {
       }
       await rm(root, { force: true, recursive: true });
     }
-  });
-});
-
-describe("resolveProductionInstallCommand", () => {
-  it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
-    expect(resolveProductionInstallCommand({})).toEqual({
-      command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
-    });
-  });
-
-  it("treats an empty OD_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
-    expect(resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
-      command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
-    });
-  });
-
-  it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
-    // --config.node-linker=hoisted intentionally matches the prior
-    // npm/electron-builder packaging layout so the AppImage pack step keeps
-    // working when the assembled-app install runs through pnpm.
-    expect(
-      resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm" }),
-    ).toEqual({
-      command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
-    });
-  });
-
-  it("chains end-to-end with buildDockerArgs: the container leaves the production install on npm", () => {
-    const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-    const containerEnv = Object.fromEntries(
-      dockerArgs.flatMap((arg, index) => (arg === "-e" ? [dockerArgs[index + 1]?.split("=") ?? []] : [])),
-    );
-    expect(containerEnv).toMatchObject({ CI: "true", npm_execpath: "/tmp/pnpm" });
-    expect(containerEnv).not.toHaveProperty("OD_TOOLS_PACK_PNPM_BIN");
-
-    const resolved = resolveProductionInstallCommand(containerEnv);
-    expect(resolved).toEqual({
-      command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
-    });
   });
 });
 

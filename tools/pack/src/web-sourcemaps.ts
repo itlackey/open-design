@@ -128,9 +128,8 @@ async function runPnpm(
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
   // `createPackageManagerInvocation` is the same primitive every platform's
-  // local `runPnpm` helper goes through, so the linux containerized build
-  // (which sets `OD_TOOLS_PACK_PNPM_BIN` to the standalone pnpm binary it
-  // bootstrapped) picks up the right command here too.
+  // local `runPnpm` helper goes through, so the Linux containerized build's
+  // standalone pnpm from `npm_execpath` is used here too.
   const invocation = createPackageManagerInvocation(args, process.env);
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,

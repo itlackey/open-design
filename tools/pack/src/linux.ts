@@ -39,8 +39,6 @@ const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
-// Optional override for environments that cannot run npm directly.
-const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
@@ -422,24 +420,8 @@ async function runPnpm(
   });
 }
 
-export type ProductionInstallCommand = { command: string; args: string[] };
-
-// The container exposes npm from its managed Node installation. npm must remain
-// the default here so file tarballs resolve their complete production trees.
-export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
-  const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
-  if (pnpmBin != null && pnpmBin.length > 0) {
-    return {
-      command: pnpmBin,
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
-    };
-  }
-  return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
-}
-
 async function runProductionInstall(appRoot: string): Promise<void> {
-  const { command, args } = resolveProductionInstallCommand(process.env);
-  await execFileAsync(command, args, {
+  await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock"], {
     cwd: appRoot,
     env: process.env,
   });
