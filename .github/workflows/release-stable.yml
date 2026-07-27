@@ -1132,6 +1132,7 @@ jobs:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
+      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
       ENABLE_MAC: "true"
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
@@ -1184,6 +1185,7 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux publish manifest
+        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-x64-publish-manifest
@@ -1221,12 +1223,14 @@ jobs:
           path: ${{ runner.temp }}/release-assets/win
 
       - name: Download linux release bundle
+        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
 
       - name: Download linux e2e spec report
+        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-e2e-report
@@ -1246,6 +1250,7 @@ jobs:
 
       - name: Prepare stable GitHub Release asset plan
         env:
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_GITHUB_ASSETS_DIR: ${{ runner.temp }}/github-release-assets
           RELEASE_GITHUB_ASSETS_SOURCE_DIR: ${{ runner.temp }}/release-assets
@@ -1304,7 +1309,7 @@ jobs:
       - name: Prepare release metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: "true"
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
@@ -1352,7 +1357,7 @@ jobs:
 
       - name: Verify release metadata
         env:
-          ENABLE_LINUX_X64: "true"
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"

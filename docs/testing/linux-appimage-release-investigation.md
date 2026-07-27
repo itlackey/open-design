@@ -16,7 +16,7 @@ branch fixes four independent failures:
 | Packaged desktop could exit with `Object has been destroyed`. | A deferred splash update could synchronously call destroyed Electron objects. | Guard both `BrowserWindow` and `webContents` at the execution boundary; suppress only Electron's exact teardown error. |
 | Portable AppImage smoke timed out while the app was healthy. | The app wrote its marker under the user profile while tools-pack polled its isolated runtime root. | Set `OD_PACKAGED_NAMESPACE_BASE_ROOT` for tools-pack launches. |
 | The release-shaped container build failed before producing an AppImage. | The builder image lacked a usable noninteractive Node/npm/pnpm execution path. | Expose managed Node and npm, route nested workspace commands to standalone pnpm, and retain npm for production tarball installation. |
-| Stable GitHub Releases omitted Linux. | Linux was hidden behind `ENABLE_STABLE_LINUX`; publication accepted a skipped job; asset planning and metadata inherited that optional result. | Always run stable Linux prepublish work, require success, and make the AppImage pair intrinsic to the stable asset plan. |
+| Stable GitHub Releases omitted Linux. | Linux was hidden behind `ENABLE_STABLE_LINUX`; publication accepted a skipped job; asset planning and metadata inherited that optional result. | Always run stable Linux prepublish work and require success, which activates the existing Linux publication path. |
 
 The change intentionally applies only to the stable release path. Beta,
 preview, and prerelease Linux policy remains unchanged.
@@ -135,19 +135,17 @@ The stable path is now fail-closed:
    - `open-design-<version>-linux-x64.AppImage`
    - `open-design-<version>-linux-x64.AppImage.sha256`
 4. The final publish job requires `build_linux.result == 'success'`.
-5. The stable-only GitHub asset planner always requires all eight public
-   assets, verifies each matching SHA-256 sidecar, and rejects missing,
-   duplicate, empty, mismatched, or unexpected planned output.
-6. Stable metadata publication and verification explicitly enable
-   `linux_x64`.
+5. The required successful result enables the existing Linux asset plan, which
+   requires all eight public assets and rejects missing, duplicate, empty, or
+   unexpected planned output.
+6. The same successful result enables `linux_x64` in stable metadata.
 7. GitHub publication remains draft-first: asset upload and metadata
    verification must succeed before `gh release edit --draft=false --latest`.
 8. Failure after draft creation attempts to delete the draft and tag.
 
-Topology coverage rejects reintroducing `ENABLE_STABLE_LINUX`, accepting a
-skipped Linux job, or deriving stable Linux metadata enablement from an
-optional result. Asset-plan coverage proves eight-file selection and fails
-when the AppImage checksum is absent.
+Topology coverage pins the unconditional stable Linux job and rejects a skipped
+Linux result. Asset-plan coverage proves the existing Linux-enabled path selects
+all eight public files.
 
 ## Changed Surfaces
 
@@ -156,8 +154,8 @@ when the AppImage checksum is absent.
 | `apps/desktop/src/main/runtime.ts` and splash tests | Teardown-safe splash execution. |
 | `tools/pack/src/linux.ts` and Linux tests | Portable smoke identity and container build repair. |
 | `.github/workflows/release-stable.yml` | Mandatory Linux build, smoke, metadata, and publication gate. |
-| `tools/release/src/storage/prepare-github-assets.ts` and tests | Mandatory stable AppImage and checksum assets. |
-| `e2e/tests/packaged-smoke-workflow.test.ts` | Stable topology and release-note regression coverage. |
+| `tools/release/tests/github-assets.test.ts` | Exercise the existing Linux-enabled eight-asset plan. |
+| `e2e/tests/packaged-smoke-workflow.test.ts` | Pin the stable Linux job and publication gate. |
 | Stable release notes and release policy docs | Describe Linux as a required stable asset. |
 
 ## Verification
@@ -171,8 +169,8 @@ Desktop typecheck/build:      passed
 Tools-pack focused Linux:     56 passed
 Tools-pack full suite:        243 passed, 8 platform skips
 Tools-pack typecheck/build:   passed
-Tools-release full suite:     28 passed
-Stable GitHub asset plan:     3 passed
+Tools-release full suite:     26 passed
+Stable GitHub asset plan:     1 passed
 Release topology suite:       52 passed
 Containerized AppImage build: passed from a populated worktree
 Container artifact E2E:       1 passed, 1 headless skip
@@ -200,9 +198,9 @@ contained no new splash, packaged-runtime, or missing-module fatal errors.
   work.
 - The final stable AppImage is independently rebuilt and smoked. Prerelease
   Linux remains optional and is not a byte-for-byte promotion source.
-- The asset planner recomputes checksums after the Actions artifact transfer,
-  but the workflow does not download the final public GitHub asset after
-  publication.
+- Platform preparation generates SHA-256 sidecars. The GitHub asset planner
+  requires the sidecars and nonempty files but does not recompute their digests
+  or download the final public assets after publication.
 - The current E2E stop path requests IPC shutdown and then signals the process
   tree immediately; retained E2E session state can report `clean: false` even
   though explicit manual IPC shutdowns are clean.
