@@ -39,9 +39,7 @@ const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
-// The containerized build sets this to the standalone pnpm binary fetched by
-// buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
-// `electronuserland/builder:base`, which strips npm/npx/corepack.
+// Optional override for environments that cannot run npm directly.
 const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
@@ -175,8 +173,9 @@ export function buildDockerArgs(
     `mv ${CONTAINER_PNPM_PATH}.tmp ${CONTAINER_PNPM_PATH} && ` +
     `chmod +x ${CONTAINER_PNPM_PATH} && ` +
     `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
-    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +
-    `command -v node >/dev/null`;
+    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}/nodejs/${CONTAINER_NODE_VERSION}/bin:${CONTAINER_PNPM_HOME}:$PATH && ` +
+    `ln -sf ${CONTAINER_PNPM_PATH} ${CONTAINER_PNPM_HOME}/pnpm && ` +
+    `command -v node >/dev/null && command -v npm >/dev/null && command -v pnpm >/dev/null`;
   const pnpmCmd = CONTAINER_PNPM_PATH;
   const innerArgs = [
     `node ${CONTAINER_TOOLS_PACK_CLI_PATH} linux build`,
@@ -213,11 +212,13 @@ export function buildDockerArgs(
     "-e",
     "HOME=/home/builder",
     "-e",
+    "CI=true",
+    "-e",
     "ELECTRON_CACHE=/home/builder/.cache/electron",
     "-e",
     "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
     "-e",
-    `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
+    `npm_execpath=${CONTAINER_PNPM_PATH}`,
   ];
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
@@ -423,15 +424,8 @@ async function runPnpm(
 
 export type ProductionInstallCommand = { command: string; args: string[] };
 
-// Picks the package manager used to materialize the assembled-app node_modules
-// during writeAssembledApp. The default (`npm`) preserves host behavior for
-// developer-machine builds. When the build runs inside
-// `electronuserland/builder:base` (which strips npm, npx, and corepack),
-// buildDockerArgs sets OD_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
-// bootstrapped, and this resolver routes the install through that binary.
-// `--config.node-linker=hoisted` keeps the resulting layout flat so
-// electron-builder packs node_modules the same way it does for npm-installed
-// trees.
+// The container exposes npm from its managed Node installation. npm must remain
+// the default here so file tarballs resolve their complete production trees.
 export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
   const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
   if (pnpmBin != null && pnpmBin.length > 0) {

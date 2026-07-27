@@ -133,11 +133,13 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("/work/.tmp/tools-pack:/tools-pack");
   });
 
-  it("sets HOME and ELECTRON_CACHE env vars", () => {
+  it("sets the noninteractive container environment", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     expect(args).toContain("HOME=/home/builder");
+    expect(args).toContain("CI=true");
     expect(args).toContain("ELECTRON_CACHE=/home/builder/.cache/electron");
     expect(args).toContain("ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder");
+    expect(args).toContain("npm_execpath=/tmp/pnpm");
   });
 
   it("passes the telemetry relay URL into containerized builds when configured", () => {
@@ -195,6 +197,9 @@ describe("buildDockerArgs", () => {
     expect(last).toMatch(/mv \/tmp\/pnpm\.tmp \/tmp\/pnpm/);
     expect(last).toMatch(/chmod \+x \/tmp\/pnpm/);
     expect(last).toMatch(/\/tmp\/pnpm env use --global 24\.\d+\.\d+/);
+    expect(last).toContain("PATH=/tmp/pnpm-home/nodejs/24.14.1/bin:/tmp/pnpm-home:$PATH");
+    expect(last).toContain("ln -sf /tmp/pnpm /tmp/pnpm-home/pnpm");
+    expect(last).toContain("command -v node >/dev/null && command -v npm >/dev/null && command -v pnpm >/dev/null");
     expect(last).toMatch(/\/tmp\/pnpm install --frozen-lockfile/);
     expect(last).toMatch(/node tools\/pack\/bin\/tools-pack\.mjs linux build --to all --namespace default/);
     expect(last).not.toMatch(/\/tmp\/pnpm tools-pack linux build/);
@@ -315,12 +320,10 @@ describe("buildDockerArgs", () => {
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
   });
 
-  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+  it("uses managed npm for production dependencies and standalone pnpm for workspace commands", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-    const envFlagIndex = args.findIndex(
-      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
-    );
-    expect(envFlagIndex).toBeGreaterThan(-1);
+    expect(args).toContain("npm_execpath=/tmp/pnpm");
+    expect(args).not.toContain("OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm");
   });
 });
 
@@ -641,21 +644,19 @@ describe("resolveProductionInstallCommand", () => {
     });
   });
 
-  it("chains end-to-end with buildDockerArgs: docker exports OD_TOOLS_PACK_PNPM_BIN and the resolver returns the standalone pnpm install for that value", () => {
+  it("chains end-to-end with buildDockerArgs: the container leaves the production install on npm", () => {
     const dockerArgs = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-    const envFlagIndex = dockerArgs.findIndex(
-      (arg, i) => arg === "-e" && dockerArgs[i + 1]?.startsWith("OD_TOOLS_PACK_PNPM_BIN="),
+    const containerEnv = Object.fromEntries(
+      dockerArgs.flatMap((arg, index) => (arg === "-e" ? [dockerArgs[index + 1]?.split("=") ?? []] : [])),
     );
-    expect(envFlagIndex).toBeGreaterThan(-1);
-    const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
-    expect(envValue).toBe("/tmp/pnpm");
+    expect(containerEnv).toMatchObject({ CI: "true", npm_execpath: "/tmp/pnpm" });
+    expect(containerEnv).not.toHaveProperty("OD_TOOLS_PACK_PNPM_BIN");
 
-    const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
+    const resolved = resolveProductionInstallCommand(containerEnv);
     expect(resolved).toEqual({
-      command: "/tmp/pnpm",
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      command: "npm",
+      args: ["install", "--omit=dev", "--no-package-lock"],
     });
-    expect(resolved.command).not.toBe("npm");
   });
 });
 
